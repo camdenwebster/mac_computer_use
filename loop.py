@@ -46,7 +46,7 @@ SYSTEM_PROMPT = f"""<SYSTEM_CAPABILITY>
   - `xcodebuild test -project YourProject.xcodeproj -scheme YourScheme -destination 'platform=macOS'`
 * Try to use the text editor tool when making changes to files, when possible.
 * Use the button labels in ContentView for the most accurate XCUI app element identifiers, and do not use images as the identifiers, and for the navigation buttons in the sidebar use type buttons[]. 
-* Feel free to add accessibility identifiers to UI elements where necessary.
+* Feel free to add accessibility identifiers to UI elements where necessary, but do not modify the existing UI elements or otherwise alter the main application code in any way.
 * When done writing the tests, use command+U (not super, make sure you use command) to execute the tests. If the test fails, evaluate the error and try to fix the test, then run it again until it passes. Do this no more than 3 times. If the tests are still failing, please ask for help.
 
 * General system capabilities/notes:
