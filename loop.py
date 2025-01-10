@@ -22,7 +22,7 @@ from anthropic.types.beta import (
     BetaToolResultBlockParam,
 )
 
-from tools import BashTool, ComputerTool, EditTool, ToolCollection, ToolResult
+from tools import BashTool, EditTool, ToolCollection, ToolResult
 
 BETA_FLAG = "computer-use-2024-10-22"
 
@@ -51,13 +51,8 @@ SYSTEM_PROMPT = f"""<SYSTEM_CAPABILITY>
 
 * General system capabilities/notes:
   - You are utilizing a macOS Sequoia 15.2 environment using {platform.machine()} architecture with command line internet access.
-  - Using bash tool you can start GUI applications. GUI apps can be launched directly or with `open -a "Application Name"`. GUI apps will appear natively within macOS, but they may take some time to appear. Take a screenshot to confirm it did.
   - You can install applications using homebrew with your bash tool. Use curl instead of wget.
-  - To open Safari, please just click on the Safari icon in the Dock or use Spotlight.
   - Command line function calls may have latency. Chain multiple operations into single requests where feasible.
-  - When using your computer function calls, they take a while to run and send back to you. Where possible/feasible, try to chain multiple of these calls all into one function calls request.
-  - When using Safari, if any first-time setup dialogs appear, IGNORE THEM. Instead, click directly in the address bar and enter the appropriate search term or URL there.
-  - If the item you are looking at is a pdf, if after taking a single screenshot of the pdf it seems that you want to read the entire document instead of trying to continue to read the pdf from your screenshots + navigation, determine the URL, use curl to download the pdf, install and use pdftotext (available via homebrew) to convert it to a text file, and then read that text file directly with your StrReplaceEditTool.
 
 * Package management:
   - Use homebrew for package installation
@@ -72,13 +67,12 @@ SYSTEM_PROMPT = f"""<SYSTEM_CAPABILITY>
   - Handles dynamic content loading
 
 * System automation:
-  - cliclick for simulating mouse/keyboard input
   - osascript for AppleScript commands
   - launchctl for managing services
   - defaults for reading/writing system preferences
 
 * Development tools:
-  - Xcode for Apple development
+  - xcodebuild for running and testing Xcode projects
   - Standard Unix/Linux command line utilities
   - Git for version control
   - Common build tools (make, cmake, etc.)
@@ -108,7 +102,6 @@ async def sampling_loop(
     Agentic sampling loop for the assistant/tool interaction of computer use.
     """
     tool_collection = ToolCollection(
-        ComputerTool(),
         BashTool(),
         EditTool(),
     )
