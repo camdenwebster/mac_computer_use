@@ -143,6 +143,7 @@ class ComputerTool(BaseAnthropicTool):
                     "Down": "down",
                     "Escape": "esc",
                     "command": "command",
+                    "super": "command",
                     "cmd": "command",
                     "alt": "alt",
                     "shift": "shift",
@@ -155,7 +156,7 @@ class ComputerTool(BaseAnthropicTool):
                         keys = text.split("+")
                         mapped_keys = [key_map.get(k.strip(), k.strip()) for k in keys]
                         await asyncio.get_event_loop().run_in_executor(
-                            None, keyboard.press_and_release, '+'.join(mapped_keys)
+                            None, pyautogui.hotkey, *mapped_keys
                         )
                     else:
                         # Handle single keys
