@@ -6,11 +6,10 @@ import pyautogui
 import keyboard
 from enum import StrEnum
 from pathlib import Path
-from typing import Literal, TypedDict
+from typing import Literal, TypedDict, cast, get_args
 from uuid import uuid4
 
-from anthropic.types.beta import BetaToolComputerUse20241022Param
-
+from anthropic.types.beta import BetaToolComputerUse20241022Param, BetaToolUnionParam
 from .base import BaseAnthropicTool, ToolError, ToolResult
 from .run import run
 
@@ -19,7 +18,7 @@ OUTPUT_DIR = "/tmp/outputs"
 TYPING_DELAY_MS = 12
 TYPING_GROUP_SIZE = 50
 
-Action = Literal[
+Action_20241022 = Literal[
     "key",
     "type",
     "mouse_move",
@@ -31,6 +30,20 @@ Action = Literal[
     "screenshot",
     "cursor_position",
 ]
+
+Action_20250124 = (
+    Action_20241022
+    | Literal[
+        "left_mouse_down",
+        "left_mouse_up",
+        "scroll",
+        "hold_key",
+        "wait",
+        "triple_click",
+    ]
+)
+
+ScrollDirection = Literal["up", "down", "left", "right"]
 
 
 class Resolution(TypedDict):
@@ -63,7 +76,7 @@ def chunks(s: str, chunk_size: int) -> list[str]:
     return [s[i : i + chunk_size] for i in range(0, len(s), chunk_size)]
 
 
-class ComputerTool(BaseAnthropicTool):
+class BaseComputerTool:
     """
     A tool that allows the agent to interact with the screen, keyboard, and mouse of the current macOS computer.
     The tool parameters are defined by Anthropic and are not editable.
@@ -71,7 +84,6 @@ class ComputerTool(BaseAnthropicTool):
     """
 
     name: Literal["computer"] = "computer"
-    api_type: Literal["computer_20241022"] = "computer_20241022"
     width: int
     height: int
     display_num: int | None
@@ -87,9 +99,6 @@ class ComputerTool(BaseAnthropicTool):
             "display_number": self.display_num,
         }
 
-    def to_params(self) -> BetaToolComputerUse20241022Param:
-        return {"name": self.name, "type": self.api_type, **self.options}
-
     def __init__(self):
         super().__init__()
 
@@ -100,7 +109,7 @@ class ComputerTool(BaseAnthropicTool):
     async def __call__(
         self,
         *,
-        action: Action,
+        action: Action_20241022,
         text: str | None = None,
         coordinate: tuple[int, int] | None = None,
         **kwargs,
@@ -201,7 +210,6 @@ class ComputerTool(BaseAnthropicTool):
                     "cliclick p",
                     take_screenshot=False,
                 )
-                import pdb; pdb.set_trace()
                 if result.output:
                     x, y = map(int, result.output.strip().split(","))
                     x, y = self.scale_coordinates(ScalingSource.COMPUTER, x, y)
@@ -280,3 +288,148 @@ class ComputerTool(BaseAnthropicTool):
         else:
             # Scale down from original resolution to SCALE_DESTINATION
             return round(x * x_scaling_factor), round(y * y_scaling_factor)
+
+class ComputerTool20241022(BaseComputerTool, BaseAnthropicTool):
+    api_type: Literal["computer_20241022"] = "computer_20241022"
+
+    def to_params(self) -> BetaToolComputerUse20241022Param:
+        return {"name": self.name, "type": self.api_type, **self.options}
+
+
+class ComputerTool20250124(BaseComputerTool, BaseAnthropicTool):
+    api_type: Literal["computer_20250124"] = "computer_20250124"
+
+    def to_params(self):
+        return cast(
+            BetaToolUnionParam,
+            {"name": self.name, "type": self.api_type, **self.options},
+        )
+
+    def validate_and_get_coordinates(self, coordinate: tuple[int, int]) -> tuple[int, int]:
+        """Validate coordinates and scale them appropriately."""
+        if not isinstance(coordinate, (list, tuple)) or len(coordinate) != 2:
+            raise ToolError(f"{coordinate} must be a tuple of length 2")
+        if not all(isinstance(i, int) and i >= 0 for i in coordinate):
+            raise ToolError(f"{coordinate} must be a tuple of non-negative ints")
+        
+        return self.scale_coordinates(ScalingSource.API, coordinate[0], coordinate[1])
+
+    async def __call__(
+        self,
+        *,
+        action: Action_20250124,
+        text: str | None = None,
+        coordinate: tuple[int, int] | None = None,
+        scroll_direction: ScrollDirection | None = None,
+        scroll_amount: int | None = None,
+        duration: int | float | None = None,
+        key: str | None = None,
+        **kwargs,
+    ):
+        if action in ("left_mouse_down", "left_mouse_up"):
+            if coordinate is not None:
+                raise ToolError(f"coordinate is not accepted for {action=}.")
+            
+            # Use cliclick for mouse down/up operations
+            if action == "left_mouse_down":
+                return await self.shell("cliclick d:.")
+            else:  # left_mouse_up
+                return await self.shell("cliclick u:.")
+
+        if action == "scroll":
+            if scroll_direction is None or scroll_direction not in get_args(
+                ScrollDirection
+            ):
+                raise ToolError(
+                    f"{scroll_direction=} must be 'up', 'down', 'left', or 'right'"
+                )
+            if not isinstance(scroll_amount, int) or scroll_amount < 0:
+                raise ToolError(f"{scroll_amount=} must be a non-negative int")
+            
+            # Move to coordinate if specified
+            if coordinate is not None:
+                x, y = self.validate_and_get_coordinates(coordinate)
+                await self.shell(f"cliclick m:{x},{y}")
+            
+            # Use cliclick for scrolling - simulate scroll wheel
+            scroll_commands = []
+            for _ in range(scroll_amount):
+                if scroll_direction == "up":
+                    scroll_commands.append("cliclick w:5")  # Scroll up
+                elif scroll_direction == "down":
+                    scroll_commands.append("cliclick w:-5")  # Scroll down
+                elif scroll_direction == "left":
+                    # Horizontal scrolling with shift+scroll
+                    scroll_commands.append("cliclick kd:shift w:5 ku:shift")
+                elif scroll_direction == "right":
+                    scroll_commands.append("cliclick kd:shift w:-5 ku:shift")
+            
+            # Execute scroll commands with key modifiers if specified
+            if text:
+                # Hold modifier key during scrolling
+                key_cmd = f"kd:{text}"
+                for cmd in scroll_commands:
+                    await self.shell(f"cliclick {key_cmd} {cmd.replace('cliclick ', '')} ku:{text}")
+            else:
+                for cmd in scroll_commands:
+                    await self.shell(cmd)
+            
+            return await self.screenshot()
+
+        if action in ("hold_key", "wait"):
+            if duration is None or not isinstance(duration, (int, float)):
+                raise ToolError(f"{duration=} must be a number")
+            if duration < 0:
+                raise ToolError(f"{duration=} must be non-negative")
+            if duration > 100:
+                raise ToolError(f"{duration=} is too long.")
+
+            if action == "hold_key":
+                if text is None:
+                    raise ToolError(f"text is required for {action}")
+                
+                # Use cliclick to hold key down, wait, then release
+                escaped_key = shlex.quote(text)
+                # Duration in milliseconds for cliclick wait
+                duration_ms = int(duration * 1000)
+                return await self.shell(f"cliclick kd:{escaped_key} w:{duration_ms} ku:{escaped_key}")
+
+            if action == "wait":
+                await asyncio.sleep(duration)
+                return await self.screenshot()
+
+        if action in (
+            "left_click",
+            "right_click",
+            "double_click",
+            "triple_click",
+            "middle_click",
+        ):
+            if text is not None:
+                raise ToolError(f"text is not accepted for {action}")
+            
+            # Move to coordinate if specified
+            if coordinate is not None:
+                x, y = self.validate_and_get_coordinates(coordinate)
+                await self.shell(f"cliclick m:{x},{y}")
+            
+            # Build cliclick command
+            click_commands = {
+                "left_click": "c:.",
+                "right_click": "rc:.",
+                "middle_click": "mc:.",
+                "double_click": "dc:.",
+                "triple_click": "tc:.",  # Triple click command for cliclick
+            }
+            
+            click_cmd = click_commands[action]
+            
+            if key:
+                # Hold modifier key during click
+                return await self.shell(f"cliclick kd:{key} {click_cmd} ku:{key}")
+            else:
+                return await self.shell(f"cliclick {click_cmd}")
+
+        return await super().__call__(
+            action=action, text=text, coordinate=coordinate, key=key, **kwargs
+        )
