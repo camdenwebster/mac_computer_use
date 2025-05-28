@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>IdPSettings</key>
+	<dict>
+		<key>OktaAuthServer</key>
+		<string>dev-77994981.okta.com</string>
+		<key>Provider</key>
+		<string>Okta</string>
+	</dict>
+	<key>Kerberos</key>
+	<dict>
+		<key>Realm</key>
+		<string>ENZIANTECH.COM</string>
+	</dict>
+	<key>TemporaryUserPermissions</key>
+	<dict>
+		<key>TemporaryUserPromotion</key>
+		<true/>
+	</dict>
+</dict>
+</plist>
